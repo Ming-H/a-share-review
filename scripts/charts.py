@@ -34,11 +34,17 @@ def save(fig, path, dpi=150):
     return path
 
 
-# ---- 图1: 近10日成交额(柱) + 上证收盘(折线, 右轴) ----
+# ---- 图1: 近10日成交额(柱+5日均量线) + 上证收盘(折线, 右轴) ----
 def chart_volume(dates, total_amount_yi, close, out):
     fig, ax = fig_ax = plt.subplots(figsize=(8.6, 3.4))
     colors = [RED if i == len(dates) - 1 else "#b9c2cf" for i in range(len(dates))]
     ax.bar(range(len(dates)), total_amount_yi, color=colors, width=0.62, zorder=2)
+    if len(total_amount_yi) >= 5:   # 5日均量基准(放量/缩量一眼可辨)
+        ma5 = [sum(total_amount_yi[max(0, i - 4):i + 1]) / len(total_amount_yi[max(0, i - 4):i + 1])
+               for i in range(len(total_amount_yi))]
+        ax.plot(range(len(dates)), ma5, color="#e08b2f", lw=1.4, ls="--",
+                label="5日均量", zorder=3)
+        ax.legend(fontsize=8, frameon=False, loc="upper left")
     _style(ax)
     ax.set_xticks(range(len(dates)))
     ax.set_xticklabels([d[5:] for d in dates], rotation=0, fontsize=8)
@@ -112,15 +118,21 @@ def chart_flow(inflow, outflow, out):
     return save(fig, out)
 
 
-# ---- 图4: 个股近60日 收盘+MA20+参考线 ----
-def chart_stock(name, dates, closes, cost=None, high52=None, trigger=None, out=None):
+# ---- 图N: 个股近60日 收盘+MA20+参考线 + 成交量副图(量价配合) ----
+def chart_stock(name, dates, closes, vols=None, cost=None, high52=None, trigger=None, out=None):
     if len(closes) < 21:
         return None
     ma20 = [None] * len(closes)
     for i in range(19, len(closes)):
         ma20[i] = sum(closes[i - 19:i + 1]) / 20.0
     x = range(len(dates))
-    fig, ax = plt.subplots(figsize=(8.6, 3.2))
+    has_vol = bool(vols) and len(vols) == len(closes) and any(v for v in vols)
+    if has_vol:
+        fig, (ax, axv) = plt.subplots(2, 1, figsize=(8.6, 4.4), sharex=True,
+                                      gridspec_kw={"height_ratios": [2.6, 1.0]})
+    else:
+        fig, ax = plt.subplots(figsize=(8.6, 3.2))
+        axv = None
     ax.plot(x, closes, color=BLUE, lw=1.6, label="收盘价", zorder=3)
     ax.plot(x, ma20, color="#e08b2f", lw=1.2, ls="--", label="MA20", zorder=2)
     cur = closes[-1]
@@ -139,9 +151,29 @@ def chart_stock(name, dates, closes, cost=None, high52=None, trigger=None, out=N
                s=26, zorder=4)
     _style(ax)
     step = max(1, len(dates) // 8)
-    ax.set_xticks(list(x)[::step])
-    ax.set_xticklabels([d[5:] for d in dates][::step], fontsize=8)
+    ticks = list(x)[::step]
+    labels = [d[5:] for d in dates][::step]
     ax.set_title("%s  现价 %.2f (距20日高 %.1f%%)" %
                  (name, cur, (cur / up20 - 1) * 100 if up20 else 0), fontsize=10, color=_DARK)
     ax.legend(fontsize=8, frameon=False, loc="upper left")
+    if has_vol:
+        # 量副图: 红涨绿跌 + 5/20日均量线(放量/缩量突破一眼可辨)
+        vcolors = [RED if (i > 0 and closes[i] >= closes[i - 1]) else GREEN
+                   for i in range(len(closes))]
+        axv.bar(x, vols, color=vcolors, width=0.7, zorder=2, alpha=0.75)
+        ma5v = [sum(vols[max(0, i - 4):i + 1]) / len(vols[max(0, i - 4):i + 1])
+                for i in range(len(vols))]
+        ma20v = [sum(vols[max(0, i - 19):i + 1]) / len(vols[max(0, i - 19):i + 1])
+                 for i in range(len(vols))]
+        axv.plot(x, ma5v, color="#e08b2f", lw=1.1, label="5日均量")
+        axv.plot(x, ma20v, color="#7a5fd0", lw=1.1, ls="--", label="20日均量")
+        _style(axv)
+        axv.grid(axis="y", color="#e3e6eb", lw=0.5)
+        axv.legend(fontsize=7, frameon=False, loc="upper left", ncol=2)
+        axv.set_xticks(ticks)
+        axv.set_xticklabels(labels, fontsize=8)
+        axv.set_ylabel("成交量", fontsize=8, color="#555")
+    else:
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(labels, fontsize=8)
     return save(fig, out)
