@@ -473,7 +473,8 @@ def build(args):
             lines.append("- %s：**%s**（昨日说「%s」）" % (c["desc"], c["result"], c["quote"]))
         yw = None
         if prev:
-            for dd in sorted({d.get("date") for d in hist if d.get("date")}, reverse=True):
+            for dd in sorted({d.get("date") for d in hist
+                              if d.get("date") and d.get("date") != trade_date}, reverse=True):
                 yw = parse_yesterday_watch(os.path.join(OUTROOT, dd))
                 if yw:
                     break
