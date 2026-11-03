@@ -177,3 +177,27 @@ def chart_stock(name, dates, closes, vols=None, cost=None, high52=None, trigger=
         ax.set_xticks(ticks)
         ax.set_xticklabels(labels, fontsize=8)
     return save(fig, out)
+
+
+# ---- 图N: 个股近N日 收盘价 + 主力资金净流入柱(红入绿出) 双栏 ----
+def chart_moneyflow(name, dates, closes, main_flows, out=None):
+    """main_flows: [{date, main_yi}] 与 dates 对齐(亿, 正=净流入)。"""
+    if len(dates) < 5:
+        return None
+    fig, (ax, axf) = plt.subplots(2, 1, figsize=(8.6, 4.2), sharex=True,
+                                  gridspec_kw={"height_ratios": [2.4, 1.2]})
+    x = range(len(dates))
+    ax.plot(x, closes, color=BLUE, lw=1.6, marker="o", ms=2.5)
+    _style(ax)
+    ax.set_title("%s  价格拉力 vs 主力资金" % name, fontsize=10, color=_DARK)
+    colors = [RED if v >= 0 else GREEN for v in main_flows]
+    axf.bar(x, main_flows, color=colors, width=0.68, zorder=2, alpha=0.85)
+    _style(axf)
+    axf.grid(axis="y", color="#e3e6eb", lw=0.5)
+    axf.axhline(0, color="#99a", lw=0.8)
+    axf.set_ylabel("主力净流入(亿)", fontsize=8, color="#555")
+    step = max(1, len(dates) // 9)
+    ticks = list(x)[::step]
+    axf.set_xticks(ticks)
+    axf.set_xticklabels([d[5:] for d in dates][::step], fontsize=8)
+    return save(fig, out)

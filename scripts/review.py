@@ -387,6 +387,72 @@ def build(args):
             lines += ["相关新闻：" + "；".join("%s" % n["title"][:30] for n in news[:3])]
         lines.append("")
         wl_snap[code] = {"price": q.get("price"), "main_inflow_wan": q.get("main_inflow_wan"), "trig": trig}
+        # 持仓组专属: 近N日主力资金流序列 + 吸筹/出逃形态标注(2026-11-03新增)
+        if cost:
+            try:
+                mf = data.stock_moneyflow_daily(code, 10)
+                if len(mf) >= 3:
+                    close_by_date = {r0["date"]: r0["close"] for r0 in k}
+                    rows_txt = []
+                    absorb = panic = 0   # 吸筹=跌日主力买; 出逃=涨日主力卖
+                    streak = 0
+                    for i, m in enumerate(mf):
+                        cl = close_by_date.get(m["date"])
+                        chg = None
+                        if cl and i > 0:
+                            prev_close = close_by_date.get(mf[i - 1]["date"])
+                            if prev_close:
+                                chg = (cl / prev_close - 1) * 100
+                        if chg is not None:
+                            if chg < 0 and m["main_yi"] > 0:
+                                absorb += 1
+                            elif chg > 0 and m["main_yi"] < 0:
+                                panic += 1
+                        rows_txt.append("%s %+0.2f亿" % (m["date"][5:], m["main_yi"]))
+                    for m in reversed(mf):
+                        if m["main_yi"] > 0:
+                            streak += 1
+                        else:
+                            break
+                    out_streak = 0
+                    for m in reversed(mf):
+                        if m["main_yi"] < 0:
+                            out_streak += 1
+                        else:
+                            break
+                    if streak >= 2:
+                        verdict = "连续%d日净流入" % streak
+                    elif out_streak >= 2:
+                        verdict = "连续%d日净流出⚠" % out_streak
+                    else:
+                        verdict = ""
+                    pattern = []
+                    if absorb >= 3:
+                        pattern.append("跌日吸筹×%d(主力接散户筹码)" % absorb)
+                    if panic >= 3:
+                        pattern.append("涨日出逃×%d⚠" % panic)
+                    lines.append("主力资金(近%d日): %s%s%s" % (
+                        len(mf), " → ".join(rows_txt[-6:]),
+                        ("｜" + verdict) if verdict else "",
+                        ("｜" + "，".join(pattern)) if pattern else ""))
+                    # 资金流图(近20日)
+                    mf20 = data.stock_moneyflow_daily(code, 20)
+                    if len(mf20) >= 6:
+                        dts = [m["date"] for m in mf20]
+                        cls = [close_by_date.get(d) for d in dts]
+                        if all(cls):
+                            anchor_mf = "〖图%d〗%s 主力资金流(近20日)" % (len(imgs) + 2, q.get("name") or code)
+                            lines += [anchor_mf, ""]
+                            try:
+                                pm = charts.chart_moneyflow(q.get("name") or code, dts, cls,
+                                                            [m["main_yi"] for m in mf20],
+                                                            out=os.path.join(outdir, "chartmf_%s.png" % code))
+                                if pm:
+                                    imgs.append((pm, anchor_mf[:4]))
+                            except Exception:
+                                pass
+            except Exception:
+                pass
         anchor = "〖图%d〗%s 近60日量价" % (len(imgs) + 1, q.get("name") or code)
         lines += [anchor, ""]
         try:

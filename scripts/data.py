@@ -555,6 +555,31 @@ def next_report_date(code):
         return None
 
 
+# ---------------- 模块四新增: 个股主力资金流日频序列 ----------------
+
+def stock_moneyflow_daily(code, days=20):
+    """个股主力资金日频序列(东财 fflow daykline, 免费):
+    [{date, main_yi, super_yi, big_yi, mid_yi, small_yi}]。
+    字段: f51日期 f52主力 f53小单 f54中单 f55大单 f56超大单(元)。
+    2026-11-03 实测与当日 ulist f62 口径交叉一致。失败返回 []。"""
+    try:
+        d = _get("https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get"
+                 "?secid=%s&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56"
+                 "&klt=101&lmt=%d" % (_secid(code), days), retries=2)
+        out = []
+        for k in (d.get("data") or {}).get("klines") or []:
+            p = k.split(",")
+            out.append({"date": p[0],
+                        "main_yi": round(float(p[1]) / 1e8, 2),
+                        "small_yi": round(float(p[2]) / 1e8, 2),
+                        "mid_yi": round(float(p[3]) / 1e8, 2),
+                        "big_yi": round(float(p[4]) / 1e8, 2),
+                        "super_yi": round(float(p[5]) / 1e8, 2)})
+        return out
+    except Exception:
+        return []
+
+
 def fundamentals_threeline(codes):
     """财报三线同比(问财单次批量, 1次额度): {code: {rev_yoy, np_yoy, ded_yoy, period}}。
     取最新已披露报告期(累计口径), 供 E1 增速预警与全息卡业绩呈现。"""
