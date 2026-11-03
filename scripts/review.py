@@ -387,6 +387,7 @@ def build(args):
             lines += ["相关新闻：" + "；".join("%s" % n["title"][:30] for n in news[:3])]
         lines.append("")
         wl_snap[code] = {"price": q.get("price"), "main_inflow_wan": q.get("main_inflow_wan"), "trig": trig}
+        mf60 = []
         # 持仓组专属: 近N日主力资金流序列 + 吸筹/出逃形态标注(2026-11-03新增)
         if cost:
             try:
@@ -435,32 +436,19 @@ def build(args):
                         len(mf), " → ".join(rows_txt[-6:]),
                         ("｜" + verdict) if verdict else "",
                         ("｜" + "，".join(pattern)) if pattern else ""))
-                    # 资金流图(近20日)
-                    mf20 = data.stock_moneyflow_daily(code, 20)
-                    if len(mf20) >= 6:
-                        dts = [m["date"] for m in mf20]
-                        cls = [close_by_date.get(d) for d in dts]
-                        if all(cls):
-                            anchor_mf = "〖图%d〗%s 主力资金流(近20日)" % (len(imgs) + 2, q.get("name") or code)
-                            lines += [anchor_mf, ""]
-                            try:
-                                pm = charts.chart_moneyflow(q.get("name") or code, dts, cls,
-                                                            [m["main_yi"] for m in mf20],
-                                                            out=os.path.join(outdir, "chartmf_%s.png" % code))
-                                if pm:
-                                    imgs.append((pm, anchor_mf[:4]))
-                            except Exception:
-                                pass
+                    mf60 = data.stock_moneyflow_daily(code, 60)
             except Exception:
+                mf60 = []
                 pass
-        anchor = "〖图%d〗%s 近60日量价" % (len(imgs) + 1, q.get("name") or code)
+        anchor = "〖图%d〗%s 近60日量价+主力资金" % (len(imgs) + 1, q.get("name") or code)
         lines += [anchor, ""]
         try:
             n60 = min(60, len(k))
             p = charts.chart_stock(q.get("name") or code,
                                    [r["date"] for r in k[-n60:]], closes[-n60:], vols[-n60:],
                                    cost=cost, high52=hi52, trigger=trig,
-                                   out=os.path.join(outdir, "chart%d_%s.png" % (len(imgs) + 1, code)))
+                                   out=os.path.join(outdir, "chart%d_%s.png" % (len(imgs) + 1, code)),
+                                   main_flows=mf60)
             if p:
                 imgs.append((p, anchor[:4]))
         except Exception:

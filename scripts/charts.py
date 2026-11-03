@@ -118,8 +118,9 @@ def chart_flow(inflow, outflow, out):
     return save(fig, out)
 
 
-# ---- 图N: 个股近60日 收盘+MA20+参考线 + 成交量副图(量价配合) ----
-def chart_stock(name, dates, closes, vols=None, cost=None, high52=None, trigger=None, out=None):
+# ---- 图N: 个股近60日 收盘+MA20+参考线 + 副图(成交量浅灰背景柱 + 主力净流入红绿前景柱) ----
+def chart_stock(name, dates, closes, vols=None, cost=None, high52=None, trigger=None, out=None,
+                main_flows=None):
     if len(closes) < 21:
         return None
     ma20 = [None] * len(closes)
@@ -157,47 +158,29 @@ def chart_stock(name, dates, closes, vols=None, cost=None, high52=None, trigger=
                  (name, cur, (cur / up20 - 1) * 100 if up20 else 0), fontsize=10, color=_DARK)
     ax.legend(fontsize=8, frameon=False, loc="upper left")
     if has_vol:
-        # 量副图: 红涨绿跌 + 5/20日均量线(放量/缩量突破一眼可辨)
-        vcolors = [RED if (i > 0 and closes[i] >= closes[i - 1]) else GREEN
-                   for i in range(len(closes))]
-        axv.bar(x, vols, color=vcolors, width=0.7, zorder=2, alpha=0.75)
-        ma5v = [sum(vols[max(0, i - 4):i + 1]) / len(vols[max(0, i - 4):i + 1])
-                for i in range(len(vols))]
-        ma20v = [sum(vols[max(0, i - 19):i + 1]) / len(vols[max(0, i - 19):i + 1])
-                 for i in range(len(vols))]
-        axv.plot(x, ma5v, color="#e08b2f", lw=1.1, label="5日均量")
-        axv.plot(x, ma20v, color="#7a5fd0", lw=1.1, ls="--", label="20日均量")
+        # 量副图(v2.2合并版): 成交量浅灰背景柱(量能感知) + 主力净流入红绿前景柱(资金方向)
+        # main_flows: [{date, main_yi}] 与 dates 按日期对齐, 无数据日不画前景
+        axv.bar(x, vols, color="#c9d2de", width=0.78, zorder=1, alpha=0.55,
+                label="成交量")
+        if main_flows:
+            fd = {m["date"]: m["main_yi"] for m in main_flows}
+            fx = [i for i, d in enumerate(dates) if d in fd]
+            fy = [fd[dates[i]] for i in fx]
+            if fy:
+                vmax = max(abs(v) for v in fy if v is not None) or 1
+                vscale = max(vols) * 0.92 / vmax   # 前景柱缩放到背景柱高程
+                axv.bar(fx, [v * vscale for v in fy],
+                        color=[RED if v >= 0 else GREEN for v in fy],
+                        width=0.55, zorder=3, label="主力净流入(右轴含义)")
         _style(axv)
         axv.grid(axis="y", color="#e3e6eb", lw=0.5)
         axv.legend(fontsize=7, frameon=False, loc="upper left", ncol=2)
         axv.set_xticks(ticks)
         axv.set_xticklabels(labels, fontsize=8)
-        axv.set_ylabel("成交量", fontsize=8, color="#555")
+        axv.set_ylabel("成交量(灰) / 主力净流入(红入绿出)", fontsize=7.5, color="#555")
     else:
         ax.set_xticks(ticks)
         ax.set_xticklabels(labels, fontsize=8)
     return save(fig, out)
 
 
-# ---- 图N: 个股近N日 收盘价 + 主力资金净流入柱(红入绿出) 双栏 ----
-def chart_moneyflow(name, dates, closes, main_flows, out=None):
-    """main_flows: [{date, main_yi}] 与 dates 对齐(亿, 正=净流入)。"""
-    if len(dates) < 5:
-        return None
-    fig, (ax, axf) = plt.subplots(2, 1, figsize=(8.6, 4.2), sharex=True,
-                                  gridspec_kw={"height_ratios": [2.4, 1.2]})
-    x = range(len(dates))
-    ax.plot(x, closes, color=BLUE, lw=1.6, marker="o", ms=2.5)
-    _style(ax)
-    ax.set_title("%s  价格拉力 vs 主力资金" % name, fontsize=10, color=_DARK)
-    colors = [RED if v >= 0 else GREEN for v in main_flows]
-    axf.bar(x, main_flows, color=colors, width=0.68, zorder=2, alpha=0.85)
-    _style(axf)
-    axf.grid(axis="y", color="#e3e6eb", lw=0.5)
-    axf.axhline(0, color="#99a", lw=0.8)
-    axf.set_ylabel("主力净流入(亿)", fontsize=8, color="#555")
-    step = max(1, len(dates) // 9)
-    ticks = list(x)[::step]
-    axf.set_xticks(ticks)
-    axf.set_xticklabels([d[5:] for d in dates][::step], fontsize=8)
-    return save(fig, out)
